@@ -1,0 +1,73 @@
+name: 每月更新人口資料
+
+on:
+  schedule:
+    # 每月 10 日 09:17（台北時間）＝ UTC 01:17
+    # 分鐘刻意錯開整點，整點是 GitHub 排程尖峰、比較容易被延後
+    - cron: '17 1 10 * *'
+  workflow_dispatch:          # 隨時可以到 Actions 頁面手動按一下
+  push:
+    paths:
+      - 'data/**'             # 改了 staff.csv 或 village_map.csv 就立刻重算
+
+permissions:
+  contents: write             # 要能 commit index.html
+  issues: write               # 要能開 issue 通知
+
+concurrency:
+  group: update-population
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 抓戶政司資料並更新 index.html
+        id: upd
+        run: python scripts/update.py
+
+      - name: 附上執行摘要
+        if: always()
+        run: cat _update_summary.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: 有變動才 commit
+        if: steps.upd.outputs.changed == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "更新人口資料至${{ steps.upd.outputs.month_label }}（來源：內政部戶政司 ODRP013）"
+          git push
+
+      - name: 更新完成，開 issue 通知
+        if: steps.upd.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "✅ 人口資料已更新至${{ steps.upd.outputs.month_label }}" \
+            --body-file _update_summary.md
+
+      - name: 需要人工處理，開 issue 提醒
+        if: steps.upd.outputs.needs_attention == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "⚠️ 人口資料更新需要人工處理（${{ steps.upd.outputs.month_label }}）" \
+            --body-file _update_summary.md
+
+      - name: 執行失敗，開 issue 提醒
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "❌ 人口資料自動更新失敗" \
+            --body "自動更新流程執行失敗，請看執行紀錄：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
