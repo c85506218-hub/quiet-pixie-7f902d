@@ -75,6 +75,9 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 .legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .leg{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--leg);white-space:nowrap}
 .leg-sq{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+#srcBadge{font-weight:700}
+#srcBadge.live{color:#2e9e5b}
+#srcBadge.fallback{color:var(--sub)}
 
 #map{flex:1;background:var(--bg)}
 
@@ -232,7 +235,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 <div class="hdr">
   <div>
     <h1>🔥 臺南市消防分隊服務人口地圖</h1>
-    <p>點擊行政區查看分隊資料 ｜ 人口資料：內政部戶政司 <span id="dataMonth" data-yyymm="11507">民國115年7月</span> ｜ 更新：<span id="updated">2026-08-25</span></p>
+    <p>點擊行政區查看分隊資料 ｜ 人口資料：內政部戶政司 <span id="dataMonth" data-yyymm="11507">民國115年7月</span> ｜ 更新：<span id="updated">2026-08-25</span> ｜ 人數：<span id="srcBadge" title="讀不到試算表時會自動使用網頁內建的數字">內建值</span></p>
   </div>
   <div class="legend">
     <div class="leg"><div class="leg-sq" style="background:#2ecc71"></div>&lt;1,500</div>
@@ -256,6 +259,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
   <button class="ctrl-btn" id="btn-edit"  onclick="toggleEdit()">✏️ 試算</button>
   <button class="ctrl-btn" id="btn-fit"   onclick="fitAll()">⤢ 全圖</button>
   <button class="ctrl-btn" id="btn-all"   onclick="openAllList()">📋 全部分隊</button>
+  <button class="ctrl-btn" id="btn-sheet" onclick="openSheet()">✏️ 編輯人數</button>
   <button class="ctrl-btn on" id="btn-label" onclick="toggleLabels()">📍 區名</button>
   <button class="ctrl-btn on" id="btn-brig"  onclick="toggleBrigade()">🔲 大隊框</button>
 </div>
@@ -541,6 +545,80 @@ function resetStaff(){
   OV={};lastEdited=null;saveOV();refreshAll();
 }
 
+// ── 人員數即時同步 ────────────────────────────────────────────────────
+// 人數的正本放在 Google 試算表（只有擁有者能改，公開唯讀）。
+// 網頁載入時讀一次；讀不到、或內容沒通過檢查，就沿用內嵌的數字，網站不會壞。
+const SHEET_ID='1cqcXU6NRTpcRLOl4PAY-zQBTxLTQIRt3RNljAjrA8UM';
+const SHEET_CSV='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/export?format=csv';
+const SHEET_EDIT='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/edit';
+
+function openSheet(){window.open(SHEET_EDIT,'_blank','noopener');}
+
+// 極簡 CSV 解析，處理引號與跳脫
+function parseCSV(text){
+  const rows=[];let row=[],cur='',q=false;
+  const s=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  for(let i=0;i<s.length;i++){
+    const c=s[i];
+    if(q){
+      if(c==='"'){ if(s[i+1]==='"'){cur+='"';i++;} else q=false; }
+      else cur+=c;
+    }else if(c==='"')q=true;
+    else if(c===','){row.push(cur);cur='';}
+    else if(c==='\n'){row.push(cur);cur='';rows.push(row);row=[];}
+    else cur+=c;
+  }
+  if(cur!==''||row.length){row.push(cur);rows.push(row);}
+  return rows.filter(r=>r.some(x=>x.trim()!==''));
+}
+
+function setBadge(live,msg){
+  const b=document.getElementById('srcBadge');
+  if(!b)return;
+  b.textContent=live?'試算表同步':'內建值';
+  b.className=live?'live':'fallback';
+  b.title=msg||(live?'人數來自 Google 試算表，改試算表即時生效'
+                    :'讀不到試算表，使用網頁內建的數字');
+}
+
+async function syncStaff(){
+  try{
+    const r=await fetch(SHEET_CSV,{cache:'no-store'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const rows=parseCSV(await r.text());
+    if(rows.length<2)throw new Error('沒有資料列');
+    const hdr=rows[0].map(x=>x.trim());
+    const iN=hdr.indexOf('分隊'), iS=hdr.indexOf('人員數');
+    if(iN<0||iS<0)throw new Error('缺少「分隊」或「人員數」欄');
+
+    const m={};
+    for(let i=1;i<rows.length;i++){
+      const name=(rows[i][iN]||'').trim();
+      if(!name)continue;
+      const v=parseInt((rows[i][iS]||'').trim().replace(/,/g,''),10);
+      if(!Number.isFinite(v)||v<=0||v>999)throw new Error(name+' 的人員數不合理');
+      if(m[name]!==undefined)throw new Error('重複的分隊：'+name);
+      m[name]=v;
+    }
+    const missing=Object.keys(ORIG_STAFF).filter(n=>m[n]===undefined);
+    if(missing.length)throw new Error('缺少：'+missing.join('、'));
+
+    let diff=0;
+    for(const d in FD)for(const u of FD[d]){
+      if(u.staff!==m[u.name]){u.staff=m[u.name];diff++;}
+    }
+    for(const n in ORIG_STAFF)ORIG_STAFF[n]=m[n];
+    // 使用者的試算值如果剛好等於新的正式值，就不再算「已調整」
+    for(const n in OV)if(OV[n]===ORIG_STAFF[n])delete OV[n];
+    saveOV();
+
+    setBadge(true);
+    if(diff)refreshAll();
+  }catch(e){
+    setBadge(false,'讀不到試算表（'+e.message+'），使用網頁內建的數字');
+  }
+}
+
 // ── 依大隊列出全部分隊（批次 key 人數用）────────────────────────────
 let allMode=false;
 
@@ -630,6 +708,7 @@ if(window.matchMedia){
 
 applyTheme(theme);
 map.fitBounds(distGeo.getBounds(),{padding:[8,8]});
+syncStaff();
 window.addEventListener('resize',()=>map.invalidateSize({pan:false}));
 </script>
 </body>
