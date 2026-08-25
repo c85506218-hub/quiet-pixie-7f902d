@@ -246,9 +246,9 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 </div>
 
 <div class="ebar" id="ebar">
-  <span>✏️ <b>試算模式</b>　<span id="eb-msg">改左側「人員數」即時重算人口比與地圖顏色</span></span>
-  <button onclick="exportStaff()">⬇ 匯出 staff.csv</button>
-  <button onclick="resetStaff()">↩ 還原官方值</button>
+  <span>🧪 <b>模擬模式</b>　<span id="eb-msg">改「人員數」看人口比會怎麼變</span></span>
+  <button onclick="openSheet()">✏️ 改正式人數（試算表）</button>
+  <button onclick="resetStaff()">↩ 還原正式值</button>
 </div>
 <div id="map"></div>
 <div class="hint" id="hint">👆 點擊行政區查看分隊詳情</div>
@@ -256,10 +256,10 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 <!-- toggle buttons -->
 <div class="map-ctrl">
   <button class="ctrl-btn" id="btn-theme" onclick="toggleTheme()">☀️ 淺色</button>
-  <button class="ctrl-btn" id="btn-edit"  onclick="toggleEdit()">✏️ 試算</button>
+  <button class="ctrl-btn" id="btn-edit"  onclick="toggleEdit()">🧪 模擬</button>
   <button class="ctrl-btn" id="btn-fit"   onclick="fitAll()">⤢ 全圖</button>
   <button class="ctrl-btn" id="btn-all"   onclick="openAllList()">📋 全部分隊</button>
-  <button class="ctrl-btn" id="btn-sheet" onclick="openSheet()">✏️ 編輯人數</button>
+  <button class="ctrl-btn" id="btn-sheet" onclick="openSheet()">✏️ 改人數</button>
   <button class="ctrl-btn on" id="btn-label" onclick="toggleLabels()">📍 區名</button>
   <button class="ctrl-btn on" id="btn-brig"  onclick="toggleBrigade()">🔲 大隊框</button>
 </div>
@@ -528,8 +528,8 @@ function renderBar(){
   if(was!==on)setTimeout(()=>map.invalidateSize({pan:false}),0);
   const n=ovCount();
   document.getElementById('eb-msg').innerHTML = n
-    ? `已調整 <b>${n}</b> 隊　目前顯示的是假設值，<b>不是官方數字</b>`
-    : '改左側「人員數」即時重算人口比與地圖顏色';
+    ? `已調整 <b>${n}</b> 隊　這是<b>只有你看得到的假設值</b>，要改正式人數請用試算表`
+    : '改「人員數」看人口比會怎麼變，不會影響其他人看到的數字';
 }
 
 function setStaff(name,val){
@@ -541,7 +541,7 @@ function setStaff(name,val){
 }
 
 function resetStaff(){
-  if(ovCount()&&!confirm('把所有調整過的人數還原成官方值？'))return;
+  if(ovCount()&&!confirm('把所有模擬過的人數還原成正式值？'))return;
   OV={};lastEdited=null;saveOV();refreshAll();
 }
 
@@ -673,28 +673,10 @@ function fitAll(){
 function toggleEdit(){
   editMode=!editMode;
   document.getElementById('btn-edit').classList.toggle('on',editMode);
-  if(editMode&&!currentDist)document.getElementById('hint').textContent='👆 點行政區，就能調整該區各分隊人數';
+  if(editMode&&!currentDist)document.getElementById('hint').textContent='👆 點行政區試算，或按「📋 全部分隊」一次看完';
   refreshAll();
 }
 
-// 匯出成 data/staff.csv 可直接覆蓋的格式
-function exportStaff(){
-  const seen=new Set(),list=[];
-  for(const d in FD)for(const u of FD[d]){
-    if(seen.has(u.name))continue;
-    seen.add(u.name);
-    list.push([u.name,gs(u),u.brigade,u.note||'',u.total===0?d:'']);
-  }
-  list.sort((a,b)=>a[2]===b[2]?a[0].localeCompare(b[0],'zh-Hant'):a[2].localeCompare(b[2],'zh-Hant'));
-  const esc=v=>/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v);
-  const csv='\ufeff'+[['分隊','人員數','大隊','備註','無里轄區時歸屬區'],...list]
-    .map(r=>r.map(esc).join(',')).join('\n')+'\n';
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-  a.download='staff.csv';
-  document.body.appendChild(a);a.click();
-  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
-}
 
 // 使用者沒手動選過主題時，跟隨系統設定
 if(window.matchMedia){
