@@ -26,6 +26,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INDEX = os.path.join(ROOT, 'index.html')
 VILLAGE_MAP = os.path.join(ROOT, 'data', 'village_map.csv')
 STAFF = os.path.join(ROOT, 'data', 'staff.csv')
+# 選用：Google 試算表「發布到網路」的 CSV 網址。有填就以試算表為準，
+# 檢查通過後回寫 staff.csv；沒填就直接用 staff.csv。
+SHEET_URL_FILE = os.path.join(ROOT, 'data', 'staff_sheet_url.txt')
 SUMMARY = os.path.join(ROOT, '_update_summary.md')
 
 API = 'https://www.ris.gov.tw/rs-opendata/api/v1/datastore/ODRP013/{month}?page={page}'
@@ -97,16 +100,110 @@ def read_csv(path):
         return list(csv.DictReader(f))
 
 
+def read_sheet_url():
+    """讀 data/staff_sheet_url.txt；沒有檔案、空的或整行是註解就回 None。"""
+    if not os.path.exists(SHEET_URL_FILE):
+        return None
+    for line in io.open(SHEET_URL_FILE, encoding='utf-8-sig'):
+        line = line.strip()
+        if line and not line.startswith('#'):
+            if not line.startswith('https://'):
+                return ('BAD', line)
+            return line
+    return None
+
+
+def sync_from_sheet(staff_rows):
+    """從 Google 試算表抓人員數，覆寫 staff_rows 的「人員數」欄。
+    回傳 (是否有異動, 問題清單)。任何一項檢查沒過就整批不採用。"""
+    url = read_sheet_url()
+    if url is None:
+        return False, []
+    if isinstance(url, tuple):
+        return False, ['data/staff_sheet_url.txt 的內容不是 https 網址：%s' % url[1]]
+
+    print('讀取 Google 試算表...')
+    req = urllib.request.Request(url, headers={'User-Agent': 'tainan-fire-map/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read().decode('utf-8-sig')
+    except Exception as e:
+        return False, ['讀取 Google 試算表失敗（網址是否設為「發布到網路」且格式選 CSV？）：%s' % e]
+
+    try:
+        rows = list(csv.DictReader(io.StringIO(raw)))
+    except Exception as e:
+        return False, ['Google 試算表內容不是有效的 CSV：%s' % e]
+
+    if not rows:
+        return False, ['Google 試算表沒有任何資料列']
+    cols = {c.strip() for c in (rows[0].keys() if rows else []) if c}
+    for need in ('分隊', '人員數'):
+        if need not in cols:
+            return False, ['Google 試算表缺少「%s」欄位（目前欄位：%s）'
+                           % (need, '、'.join(sorted(cols)) or '無')]
+
+    known = {norm(r['分隊']) for r in staff_rows}
+    sheet, problems = {}, []
+    for i, r in enumerate(rows, start=2):
+        name = norm(r.get('分隊') or '')
+        if not name:
+            continue
+        raw_n = (r.get('人員數') or '').strip().replace(',', '')
+        if raw_n == '':
+            problems.append('試算表第 %d 列「%s」的人員數是空的' % (i, name))
+            continue
+        if not raw_n.isdigit():
+            problems.append('試算表第 %d 列「%s」的人員數不是數字：%s' % (i, name, raw_n))
+            continue
+        n = int(raw_n)
+        if n <= 0 or n > 999:
+            problems.append('試算表第 %d 列「%s」的人員數不合理：%d' % (i, name, n))
+            continue
+        if name not in known:
+            problems.append('試算表有分隊「%s」，但 data/staff.csv 沒有這一隊（名稱打錯？）' % name)
+            continue
+        if name in sheet:
+            problems.append('試算表出現重複的分隊：%s' % name)
+            continue
+        sheet[name] = n
+
+    missing = sorted(known - set(sheet))
+    if missing:
+        problems.append('試算表缺少這些分隊：%s' % '、'.join(missing))
+
+    if problems:
+        return False, problems
+
+    changed = False
+    for r in staff_rows:
+        name = norm(r['分隊'])
+        if int(r['人員數'] or 0) != sheet[name]:
+            print('  %s：%s → %s' % (name, r['人員數'], sheet[name]))
+            r['人員數'] = str(sheet[name])
+            changed = True
+    if changed:
+        with io.open(STAFF, 'w', encoding='utf-8', newline='\n') as f:
+            w = csv.DictWriter(f, fieldnames=list(staff_rows[0].keys()))
+            w.writeheader()
+            w.writerows(staff_rows)
+        print('  已回寫 data/staff.csv')
+    else:
+        print('  試算表與 staff.csv 一致')
+    return changed, []
+
+
 def build_fd(pop_by_code):
     vmap = read_csv(VILLAGE_MAP)
     staff_rows = read_csv(STAFF)
+    sheet_changed, sheet_problems = sync_from_sheet(staff_rows)
 
     staff = {norm(r['分隊']): int(r['人員數'] or 0) for r in staff_rows}
     brig = {norm(r['分隊']): norm(r['大隊']) for r in staff_rows}
     note = {norm(r['分隊']): norm(r.get('備註') or '') for r in staff_rows}
     home = {norm(r['分隊']): norm(r.get('無里轄區時歸屬區') or '') for r in staff_rows}
 
-    problems = []
+    problems = list(sheet_problems)
 
     # 對照表的里 vs API 的里
     mapped = {r['里代碼'] for r in vmap}
