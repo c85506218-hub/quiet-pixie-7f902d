@@ -161,6 +161,25 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
   border:1px solid var(--ebar-bd);border-radius:5px;padding:1px 2px}
 .sinput:focus{outline:none;border-color:var(--val-blue)}
 .uedit{outline:1px dashed var(--ebar-hi);outline-offset:1px}
+
+/* 全部分隊清單 */
+.panel.wide{width:392px}
+.ahdr,.arow{display:grid;grid-template-columns:1fr 50px 60px 54px;gap:6px;align-items:center}
+.ahdr{padding:0 6px 5px;font-size:9px;color:var(--lbl);text-align:right;
+  border-bottom:1px solid var(--panel-border)}
+.ahdr span:first-child{text-align:left}
+.arow{padding:4px 6px;border-bottom:1px solid var(--summ-line);border-radius:5px}
+.arow:hover{background:var(--summ-bg)}
+.an{font-size:11px;color:var(--uname);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.an small{color:var(--lbl);font-size:9px;margin-left:3px}
+.ap{font-size:10px;color:var(--val-teal);text-align:right}
+.ar{font-size:11px;font-weight:700;text-align:right}
+.sinput.sm{width:100%;font-size:12px;padding:2px 0}
+.ghdr{display:flex;justify-content:space-between;align-items:baseline;
+  margin:12px 0 4px;padding-bottom:3px;border-bottom:2px solid var(--panel-border)}
+.gname{font-size:12px;font-weight:700}
+:root[data-theme="light"] .gname{filter:brightness(.72) saturate(1.35)}
+.gsum{font-size:9px;color:var(--lbl)}
 .bw{margin-top:7px}
 .bl{display:flex;justify-content:space-between;font-size:9px;color:var(--lbl);margin-bottom:3px}
 .bb{height:5px;background:var(--bar-bg);border-radius:3px;overflow:hidden}
@@ -213,7 +232,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 <div class="hdr">
   <div>
     <h1>🔥 臺南市消防分隊服務人口地圖</h1>
-    <p>點擊行政區查看分隊資料 ｜ 人口資料：內政部戶政司 <span id="dataMonth" data-yyymm="11507">民國115年7月</span> ｜ 更新：<span id="updated">2026-08-21</span></p>
+    <p>點擊行政區查看分隊資料 ｜ 人口資料：內政部戶政司 <span id="dataMonth" data-yyymm="11507">民國115年7月</span> ｜ 更新：<span id="updated">2026-08-25</span></p>
   </div>
   <div class="legend">
     <div class="leg"><div class="leg-sq" style="background:#2ecc71"></div>&lt;1,500</div>
@@ -235,6 +254,8 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 <div class="map-ctrl">
   <button class="ctrl-btn" id="btn-theme" onclick="toggleTheme()">☀️ 淺色</button>
   <button class="ctrl-btn" id="btn-edit"  onclick="toggleEdit()">✏️ 試算</button>
+  <button class="ctrl-btn" id="btn-fit"   onclick="fitAll()">⤢ 全圖</button>
+  <button class="ctrl-btn" id="btn-all"   onclick="openAllList()">📋 全部分隊</button>
   <button class="ctrl-btn on" id="btn-label" onclick="toggleLabels()">📍 區名</button>
   <button class="ctrl-btn on" id="btn-brig"  onclick="toggleBrigade()">🔲 大隊框</button>
 </div>
@@ -403,7 +424,8 @@ function toggleBrigade(){
 
 // ── Panel ─────────────────────────────────────────────────────────────
 function openPanel(name){
-  currentDist=name;
+  currentDist=name; allMode=false;
+  document.getElementById('panel').classList.remove('wide');
   const units=FD[name]||[];
   const brigades=[...new Set(units.map(u=>u.brigade))];
   const totPop=units.reduce((s,u)=>s+u.pop,0);
@@ -454,8 +476,8 @@ function openPanel(name){
 }
 
 function closePanel(){
-  currentDist=null;
-  document.getElementById('panel').classList.remove('open');
+  currentDist=null; allMode=false;
+  document.getElementById('panel').classList.remove('open','wide');
   if(activeLayer){distGeo.resetStyle(activeLayer);activeLayer=null;}
   document.getElementById('hint').classList.remove('hidden');
 }
@@ -485,7 +507,7 @@ function refreshAll(){
   });
   if(activeLayer)activeLayer.setStyle({weight:3,color:cssv('--poly-active'),fillOpacity:+cssv('--fill-op-active')});
   if(brigOn)brigGeo.bringToFront();
-  if(currentDist)openPanel(currentDist);
+  if(allMode)openAll(); else if(currentDist)openPanel(currentDist);
   renderBar();
   if(editMode&&lastEdited){
     const el=document.querySelector(`.sinput[data-unit="${lastEdited}"]`);
@@ -496,7 +518,10 @@ function refreshAll(){
 function renderBar(){
   const bar=document.getElementById('ebar');
   const on=editMode||ovCount()>0;
+  const was=bar.classList.contains('show');
   bar.classList.toggle('show',on);
+  // 容器高度變了要讓 Leaflet 重新量，不然點擊座標與畫面會對不上
+  if(was!==on)setTimeout(()=>map.invalidateSize({pan:false}),0);
   const n=ovCount();
   document.getElementById('eb-msg').innerHTML = n
     ? `已調整 <b>${n}</b> 隊　目前顯示的是假設值，<b>不是官方數字</b>`
@@ -514,6 +539,57 @@ function setStaff(name,val){
 function resetStaff(){
   if(ovCount()&&!confirm('把所有調整過的人數還原成官方值？'))return;
   OV={};lastEdited=null;saveOV();refreshAll();
+}
+
+// ── 依大隊列出全部分隊（批次 key 人數用）────────────────────────────
+let allMode=false;
+
+function openAllList(){
+  editMode=true;
+  document.getElementById('btn-edit').classList.add('on');
+  openAll();
+  renderBar();
+}
+
+function openAll(){
+  allMode=true; currentDist=null;
+  if(activeLayer){distGeo.resetStyle(activeLayer);activeLayer=null;}
+  const seen=new Set(), byB={};
+  for(const d in FD)for(const u of FD[d]){
+    if(seen.has(u.name))continue;
+    seen.add(u.name);
+    (byB[u.brigade]=byB[u.brigade]||[]).push({u:u,d:d});
+  }
+  let tot=0, html='<div class="ahdr"><span>分隊</span><span>服務人口</span><span>人員數</span><span>人口比</span></div>';
+  const BORD={'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
+  const brigs=Object.keys(byB).sort((a,b)=>(BORD[a[1]]||99)-(BORD[b[1]]||99)||a.localeCompare(b,'zh-Hant'));
+  for(const b of brigs){
+    const list=byB[b].sort((x,y)=>y.u.total-x.u.total);
+    const st=list.reduce((s,x)=>s+gs(x.u),0);
+    tot+=st;
+    html+=`<div class="ghdr"><span class="gname" style="color:${BC[b]||'#607d8b'}">${b}</span>`
+        + `<span class="gsum">${list.length} 隊 ｜ ${st} 人</span></div>`;
+    for(const x of list){
+      const u=x.u, r=uRatio(u);
+      html+=`<div class="arow${OV[u.name]!==undefined?' uedit':''}">`
+          + `<span class="an">${u.name}${u.note?`<small>${u.note}</small>`:''}</span>`
+          + `<span class="ap">${u.total>0?(u.total/10000).toFixed(1)+'萬':'—'}</span>`
+          + `<input class="sinput sm" type="number" min="0" max="999" value="${gs(u)}" data-unit="${u.name}"`
+          + ` onchange="setStaff('${u.name}',this.value)" onfocus="lastEdited='${u.name}'">`
+          + `<span class="ar" style="color:${ratioText(r)}">${r>0?r.toLocaleString():'—'}</span></div>`;
+    }
+  }
+  document.getElementById('pd-n').textContent='全部分隊';
+  document.getElementById('pd-b').textContent=`${seen.size} 隊 ｜ 人力合計 ${tot} 人`;
+  document.getElementById('pd-body').innerHTML=html;
+  const pn=document.getElementById('panel');
+  pn.classList.add('open','wide');
+  document.getElementById('hint').classList.add('hidden');
+}
+
+function fitAll(){
+  map.invalidateSize({pan:false});
+  map.fitBounds(distGeo.getBounds(),{padding:[8,8]});
 }
 
 function toggleEdit(){
@@ -554,6 +630,7 @@ if(window.matchMedia){
 
 applyTheme(theme);
 map.fitBounds(distGeo.getBounds(),{padding:[8,8]});
+window.addEventListener('resize',()=>map.invalidateSize({pan:false}));
 </script>
 </body>
 </html>
