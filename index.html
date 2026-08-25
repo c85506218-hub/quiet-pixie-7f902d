@@ -33,8 +33,6 @@
   --panel-shadow:-8px 0 32px rgba(0,0,0,.5);
   --poly-stroke:#0a1520; --poly-hover:#64b5f6; --poly-active:#90caf9;
   --fill-op:.6; --fill-op-hover:.82; --fill-op-active:.88;
-  --ebar-bg:rgba(60,42,10,.95); --ebar-bd:#7a5a18; --ebar-fg:#f0d9a0; --ebar-hi:#ffc94d;
-  --sinput-bg:#0a1d30;
 }
 :root[data-theme="light"]{
   --bg:#f4f0e6;
@@ -60,8 +58,6 @@
   --panel-shadow:-8px 0 32px rgba(60,50,30,.16);
   --poly-stroke:#fffdf7; --poly-hover:#1565c0; --poly-active:#0d47a1;
   --fill-op:.62; --fill-op-hover:.8; --fill-op-active:.86;
-  --ebar-bg:rgba(255,244,214,.97); --ebar-bd:#d6b978; --ebar-fg:#6b5320; --ebar-hi:#a5720c;
-  --sinput-bg:#fffdf7;
 }
 
 *{margin:0;padding:0;box-sizing:border-box}
@@ -147,24 +143,6 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 .u3 .lbl{font-size:9px;color:var(--lbl);margin-top:1px}
 .xnote{font-size:9px;color:var(--lbl);margin-top:5px;line-height:1.5}
 
-/* 試算模式 */
-.ebar{display:none;flex-shrink:0;z-index:950;
-  background:var(--ebar-bg);border-bottom:1px solid var(--ebar-bd);
-  padding:7px 14px;font-size:11px;color:var(--ebar-fg);
-  align-items:center;gap:10px;flex-wrap:wrap}
-.ebar.show{display:flex}
-.ebar b{color:var(--ebar-hi)}
-.ebar button{background:var(--btn-bg);border:1px solid var(--ebar-bd);color:var(--ebar-fg);
-  border-radius:6px;padding:3px 9px;font-size:10px;cursor:pointer;
-  font-family:'Noto Sans TC',sans-serif;white-space:nowrap;transition:all .15s}
-.ebar button:hover{background:var(--btn-on-bg);color:var(--btn-on-fg)}
-.sinput{width:56px;text-align:center;font-size:14px;font-weight:700;
-  font-family:'Noto Sans TC',sans-serif;
-  background:var(--sinput-bg);color:var(--val-blue);
-  border:1px solid var(--ebar-bd);border-radius:5px;padding:1px 2px}
-.sinput:focus{outline:none;border-color:var(--val-blue)}
-.uedit{outline:1px dashed var(--ebar-hi);outline-offset:1px}
-
 /* 全部分隊清單 */
 .panel.wide{width:392px}
 .ahdr,.arow{display:grid;grid-template-columns:1fr 50px 60px 54px;gap:6px;align-items:center}
@@ -176,8 +154,9 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 .an{font-size:11px;color:var(--uname);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .an small{color:var(--lbl);font-size:9px;margin-left:3px}
 .ap{font-size:10px;color:var(--val-teal);text-align:right}
+.as{font-size:12px;font-weight:700;color:var(--val-blue);text-align:right;
+  font-variant-numeric:tabular-nums}
 .ar{font-size:11px;font-weight:700;text-align:right}
-.sinput.sm{width:100%;font-size:12px;padding:2px 0}
 .ghdr{display:flex;justify-content:space-between;align-items:baseline;
   margin:12px 0 4px;padding-bottom:3px;border-bottom:2px solid var(--panel-border)}
 .gname{font-size:12px;font-weight:700}
@@ -244,21 +223,13 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
     <div class="leg"><div class="leg-sq" style="background:#e74c3c"></div>&gt;3,500 人/員</div>
   </div>
 </div>
-
-<div class="ebar" id="ebar">
-  <span>🧪 <b>模擬模式</b>　<span id="eb-msg">改「人員數」看人口比會怎麼變</span></span>
-  <button onclick="openSheet()">✏️ 改正式人數（試算表）</button>
-  <button onclick="resetStaff()">↩ 還原正式值</button>
-</div>
 <div id="map"></div>
 <div class="hint" id="hint">👆 點擊行政區查看分隊詳情</div>
 
 <!-- toggle buttons -->
 <div class="map-ctrl">
-  <button class="ctrl-btn" id="btn-theme" onclick="toggleTheme()">☀️ 淺色</button>
-  <button class="ctrl-btn" id="btn-edit"  onclick="toggleEdit()">🧪 模擬</button>
-  <button class="ctrl-btn" id="btn-fit"   onclick="fitAll()">⤢ 全圖</button>
-  <button class="ctrl-btn" id="btn-all"   onclick="openAllList()">📋 全部分隊</button>
+  <button class="ctrl-btn" id="btn-theme" onclick="toggleTheme()">☀️ 淺色</button>  <button class="ctrl-btn" id="btn-fit"   onclick="fitAll()">⤢ 全圖</button>
+  <button class="ctrl-btn" id="btn-all"   onclick="openAll()">📋 全部分隊</button>
   <button class="ctrl-btn" id="btn-sheet" onclick="openSheet()">✏️ 改人數</button>
   <button class="ctrl-btn on" id="btn-label" onclick="toggleLabels()">📍 區名</button>
   <button class="ctrl-btn on" id="btn-brig"  onclick="toggleBrigade()">🔲 大隊框</button>
@@ -281,24 +252,17 @@ const BC={"第一大隊": "#42A5F5", "第二大隊": "#66BB6A", "第三大隊": 
 const CE={"新營區": [120.2955, 23.3017], "鹽水區": [120.2484, 23.298], "白河區": [120.4579, 23.3514], "後壁區": [120.3486, 23.362], "麻豆區": [120.2413, 23.1827], "下營區": [120.2648, 23.2312], "六甲區": [120.3799, 23.2273], "官田區": [120.3479, 23.1912], "大內區": [120.3988, 23.1449], "佳里區": [120.1787, 23.1672], "學甲區": [120.1842, 23.2522], "西港區": [120.2003, 23.125], "新化區": [120.3358, 23.0339], "新市區": [120.2926, 23.0832], "安定區": [120.2295, 23.0997], "玉井區": [120.461, 23.1149], "楠西區": [120.517, 23.1791], "南化區": [120.5442, 23.1153], "左鎮區": [120.4123, 23.0264], "仁德區": [120.2419, 22.9414], "歸仁區": [120.2931, 22.9468], "關廟區": [120.3343, 22.9559], "龍崎區": [120.3871, 22.9549], "永康區": [120.2543, 23.0274], "北區": [120.206, 23.01], "北門區": [120.1255, 23.2786], "安南區": [120.1526, 23.0487], "南區": [120.1898, 22.9556], "東區": [120.2282, 22.9818], "安平區": [120.1643, 22.9898], "中西區": [120.1942, 22.9952], "善化區": [120.2988, 23.1402], "山上區": [120.3707, 23.0971], "柳營區": [120.3549, 23.269], "東山區": [120.4441, 23.2785], "七股區": [120.0993, 23.1232], "將軍區": [120.1271, 23.2086]};
 
 // 分隊服務人口比 = 該隊全部服務人口 ÷ 人員數（即時計算，不存死值）
-// ── 在職人數試算：使用者在站上調整的值存在瀏覽器，不影響其他人 ──────
-const SKEY='fdmap-staff-override';
-let editMode=false, OV={}, lastEdited=null;
-try{OV=JSON.parse(localStorage.getItem(SKEY)||'{}');}catch(e){OV={};}
+// 人員數的正本在 Google 試算表，網頁只讀不寫
 const ORIG_STAFF={};
 for(const d in FD)for(const u of FD[d])ORIG_STAFF[u.name]=u.staff;
-for(const k in OV)if(!(k in ORIG_STAFF)||OV[k]===ORIG_STAFF[k])delete OV[k];
+// 舊版的瀏覽器端試算值不再使用，清掉以免殘留
+try{localStorage.removeItem('fdmap-staff-override');}catch(e){}
 
-// gs = get staff：有調整過就用調整值，否則用官方值
-function gs(u){const v=OV[u.name];return (typeof v==='number'&&v>=0)?v:u.staff;}
-function ovCount(){return Object.keys(OV).length;}
-function saveOV(){try{localStorage.setItem(SKEY,JSON.stringify(OV));}catch(e){}}
-
-function uRatio(u){const s=gs(u);return (s>0&&u.total>0)?Math.round(u.total/s):0;}
+function uRatio(u){return (u.staff>0&&u.total>0)?Math.round(u.total/u.staff):0;}
 
 // 該區投入人力：跨行政區的分隊，按本區人口占全隊服務人口的比例折算
 function effStaff(d){
-  return (FD[d]||[]).reduce((s,u)=>s+(u.total>0?gs(u)*u.pop/u.total:0),0);
+  return (FD[d]||[]).reduce((s,u)=>s+(u.total>0?u.staff*u.pop/u.total:0),0);
 }
 
 // 該區服務人口比 = 區人口 ÷ 折算人力
@@ -451,17 +415,13 @@ function openPanel(name){
       const rf=ratioColor(ur);  // 色塊用
       const fw=ur>0?Math.min(100,Math.round(ur/5500*100)):0;
       const cross=u.total>0&&u.total!==u.pop;   // 跨行政區
-      html+=`<div class="ucard${OV[u.name]!==undefined?' uedit':''}">
+      html+=`<div class="ucard">
         <div class="uname">${u.name}
           <span class="ubadge brig" style="background:${bc}22;color:${bc}">${u.brigade}</span>
           ${u.note?`<span class="ubadge" style="background:var(--note-bg);color:var(--note-fg)">${u.note}</span>`:''}
         </div>
         <div class="u3">
-          <div>${editMode
-            ?`<input class="sinput" type="number" min="0" max="999" value="${gs(u)}" data-unit="${u.name}"
-                onchange="setStaff('${u.name}',this.value)" onfocus="lastEdited='${u.name}'">`
-            :`<div class="val" style="color:var(--val-blue)">${gs(u)}</div>`}
-            <div class="lbl">人員數${OV[u.name]!==undefined?' ✎':''}</div></div>
+          <div><div class="val" style="color:var(--val-blue)">${u.staff}</div><div class="lbl">人員數</div></div>
           <div><div class="val" style="color:var(--val-teal)">${u.total>0?(u.total/10000).toFixed(1)+'萬':'—'}</div><div class="lbl">服務人口</div></div>
           <div><div class="val" style="color:${rc}">${ur>0?ur.toLocaleString():'—'}</div><div class="lbl">人口比</div></div>
         </div>
@@ -503,7 +463,6 @@ function applyTheme(t){
 }
 function toggleTheme(){applyTheme(theme==='dark'?'light':'dark');}
 
-// ── 試算模式 ──────────────────────────────────────────────────────────
 function refreshAll(){
   distGeo.eachLayer(l=>{
     distGeo.resetStyle(l);
@@ -512,37 +471,6 @@ function refreshAll(){
   if(activeLayer)activeLayer.setStyle({weight:3,color:cssv('--poly-active'),fillOpacity:+cssv('--fill-op-active')});
   if(brigOn)brigGeo.bringToFront();
   if(allMode)openAll(); else if(currentDist)openPanel(currentDist);
-  renderBar();
-  if(editMode&&lastEdited){
-    const el=document.querySelector(`.sinput[data-unit="${lastEdited}"]`);
-    if(el){el.focus();el.select();}
-  }
-}
-
-function renderBar(){
-  const bar=document.getElementById('ebar');
-  const on=editMode||ovCount()>0;
-  const was=bar.classList.contains('show');
-  bar.classList.toggle('show',on);
-  // 容器高度變了要讓 Leaflet 重新量，不然點擊座標與畫面會對不上
-  if(was!==on)setTimeout(()=>map.invalidateSize({pan:false}),0);
-  const n=ovCount();
-  document.getElementById('eb-msg').innerHTML = n
-    ? `已調整 <b>${n}</b> 隊　這是<b>只有你看得到的假設值</b>，要改正式人數請用試算表`
-    : '改「人員數」看人口比會怎麼變，不會影響其他人看到的數字';
-}
-
-function setStaff(name,val){
-  const n=parseInt(val,10);
-  if(!isFinite(n)||n<0||n===ORIG_STAFF[name])delete OV[name];
-  else OV[name]=Math.min(n,999);
-  saveOV();
-  refreshAll();
-}
-
-function resetStaff(){
-  if(ovCount()&&!confirm('把所有模擬過的人數還原成正式值？'))return;
-  OV={};lastEdited=null;saveOV();refreshAll();
 }
 
 // ── 人員數即時同步 ────────────────────────────────────────────────────
@@ -608,10 +536,6 @@ async function syncStaff(){
       if(u.staff!==m[u.name]){u.staff=m[u.name];diff++;}
     }
     for(const n in ORIG_STAFF)ORIG_STAFF[n]=m[n];
-    // 使用者的試算值如果剛好等於新的正式值，就不再算「已調整」
-    for(const n in OV)if(OV[n]===ORIG_STAFF[n])delete OV[n];
-    saveOV();
-
     setBadge(true);
     if(diff)refreshAll();
   }catch(e){
@@ -621,13 +545,6 @@ async function syncStaff(){
 
 // ── 依大隊列出全部分隊（批次 key 人數用）────────────────────────────
 let allMode=false;
-
-function openAllList(){
-  editMode=true;
-  document.getElementById('btn-edit').classList.add('on');
-  openAll();
-  renderBar();
-}
 
 function openAll(){
   allMode=true; currentDist=null;
@@ -643,17 +560,16 @@ function openAll(){
   const brigs=Object.keys(byB).sort((a,b)=>(BORD[a[1]]||99)-(BORD[b[1]]||99)||a.localeCompare(b,'zh-Hant'));
   for(const b of brigs){
     const list=byB[b].sort((x,y)=>y.u.total-x.u.total);
-    const st=list.reduce((s,x)=>s+gs(x.u),0);
+    const st=list.reduce((s,x)=>s+x.u.staff,0);
     tot+=st;
     html+=`<div class="ghdr"><span class="gname" style="color:${BC[b]||'#607d8b'}">${b}</span>`
         + `<span class="gsum">${list.length} 隊 ｜ ${st} 人</span></div>`;
     for(const x of list){
       const u=x.u, r=uRatio(u);
-      html+=`<div class="arow${OV[u.name]!==undefined?' uedit':''}">`
+      html+=`<div class="arow">`
           + `<span class="an">${u.name}${u.note?`<small>${u.note}</small>`:''}</span>`
           + `<span class="ap">${u.total>0?(u.total/10000).toFixed(1)+'萬':'—'}</span>`
-          + `<input class="sinput sm" type="number" min="0" max="999" value="${gs(u)}" data-unit="${u.name}"`
-          + ` onchange="setStaff('${u.name}',this.value)" onfocus="lastEdited='${u.name}'">`
+          + `<span class="as">${u.staff}</span>`
           + `<span class="ar" style="color:${ratioText(r)}">${r>0?r.toLocaleString():'—'}</span></div>`;
     }
   }
@@ -670,11 +586,14 @@ function fitAll(){
   map.fitBounds(distGeo.getBounds(),{padding:[8,8]});
 }
 
-function toggleEdit(){
-  editMode=!editMode;
-  document.getElementById('btn-edit').classList.toggle('on',editMode);
-  if(editMode&&!currentDist)document.getElementById('hint').textContent='👆 點行政區試算，或按「📋 全部分隊」一次看完';
-  refreshAll();
+// 容器尺寸變了就讓 Leaflet 重新量測。若網頁是在背景分頁載入，
+// 容器一開始是 0×0，Leaflet 會算出錯的縮放，等有尺寸時要補一次 fitBounds。
+function remeasure(){
+  const el=document.getElementById('map');
+  if(!el.clientWidth||!el.clientHeight)return;
+  const before=map.getSize();
+  map.invalidateSize({pan:false});
+  if(!before.x||!before.y)map.fitBounds(distGeo.getBounds(),{padding:[8,8]});
 }
 
 
@@ -691,7 +610,9 @@ if(window.matchMedia){
 applyTheme(theme);
 map.fitBounds(distGeo.getBounds(),{padding:[8,8]});
 syncStaff();
-window.addEventListener('resize',()=>map.invalidateSize({pan:false}));
+window.addEventListener('resize',remeasure);
+if(window.ResizeObserver)new ResizeObserver(remeasure).observe(document.getElementById('map'));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)remeasure();});
 </script>
 </body>
 </html>
