@@ -76,6 +76,9 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 #srcBadge.fallback{color:var(--sub)}
 
 #map{flex:1;background:var(--bg)}
+/* 彩色底圖壓彩度：周圍山地的綠若太飽和，會跟圖例「<1,500」的綠混淆 */
+.leaflet-tile-pane{filter:saturate(.55)}
+:root[data-theme="dark"] .leaflet-tile-pane{filter:none}
 
 /* district name labels */
 .dist-label{
@@ -311,7 +314,7 @@ const NLSC_ATTR='圖資：<a href="https://maps.nlsc.gov.tw/" target="_blank" re
 const nlsc=layer=>L.tileLayer(
   'https://wmts.nlsc.gov.tw/wmts/'+layer+'/default/GoogleMapsCompatible/{z}/{y}/{x}',
   {attribution:NLSC_ATTR,maxZoom:20});
-const TILES={dark:nlsc('EMAP2'), light:nlsc('EMAP01')};
+const TILES={dark:nlsc('EMAP2'), light:nlsc('EMAP')};
 
 // 備援底圖：國土測繪中心連不上時自動接手，不會變成一片空白
 const ESRI_ATTR='圖資：Esri';
