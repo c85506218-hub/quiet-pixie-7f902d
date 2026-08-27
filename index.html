@@ -214,7 +214,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);height:100vh;
 <div class="hdr">
   <div>
     <h1>🔥 臺南市消防分隊服務人口地圖</h1>
-    <p>點擊行政區查看分隊資料 ｜ 人口資料：內政部戶政司 <span id="dataMonth" data-yyymm="11507">民國115年7月</span> ｜ 更新：<span id="updated">2026-08-25</span> ｜ 人數：<span id="srcBadge" title="讀不到試算表時會自動使用網頁內建的數字">內建值</span></p>
+    <p>點擊行政區查看分隊資料 ｜ 人口資料：內政部戶政司 <span id="dataMonth" data-yyymm="11507">民國115年7月</span> ｜ 更新：<span id="updated">2026-08-27</span> ｜ 人數：<span id="srcBadge" title="讀不到試算表時會自動使用網頁內建的數字">內建值</span></p>
   </div>
   <div class="legend">
     <div class="leg"><div class="leg-sq" style="background:#2ecc71"></div>&lt;1,500</div>
@@ -304,12 +304,40 @@ function tipHTML(name){
 
 // ── Map ──────────────────────────────────────────────────────────────
 const map=L.map('map',{center:[23.08,120.22],zoom:10,zoomControl:true});
-const TILE_OPT={attribution:'© OpenStreetMap © CARTO',subdomains:'abcd',maxZoom:19};
-const TILES={
-  dark :L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',TILE_OPT),
-  light:L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',TILE_OPT)
-};
-TILES[theme].addTo(map);
+// 底圖用內政部國土測繪中心的國產圖資：免金鑰、有中文地名、涵蓋全臺。
+// EMAP01 是灰階版（配淺色主題），EMAP2 是深色版。
+// 原本用的 CARTO 自 2026 年起要求 API key，未帶金鑰的圖磚會被蓋上浮水印。
+const NLSC_ATTR='圖資：<a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">內政部國土測繪中心</a>';
+const nlsc=layer=>L.tileLayer(
+  'https://wmts.nlsc.gov.tw/wmts/'+layer+'/default/GoogleMapsCompatible/{z}/{y}/{x}',
+  {attribution:NLSC_ATTR,maxZoom:20});
+const TILES={dark:nlsc('EMAP2'), light:nlsc('EMAP01')};
+
+// 備援底圖：國土測繪中心連不上時自動接手，不會變成一片空白
+const ESRI_ATTR='圖資：Esri';
+const esri=name=>L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/'+name+'/MapServer/tile/{z}/{y}/{x}',
+  {attribution:ESRI_ATTR,maxNativeZoom:16,maxZoom:20});
+const FALLBACK={dark:esri('World_Dark_Gray_Base'), light:esri('World_Light_Gray_Base')};
+
+let tileErrors=0, usingFallback=false;
+function baseLayer(t){return (usingFallback?FALLBACK:TILES)[t];}
+function showBase(){
+  const wanted=baseLayer(theme);
+  [TILES,FALLBACK].forEach(set=>{
+    for(const k in set)if(set[k]!==wanted&&map.hasLayer(set[k]))map.removeLayer(set[k]);
+  });
+  if(!map.hasLayer(wanted))wanted.addTo(map);
+}
+for(const k in TILES){
+  TILES[k].on('tileerror',()=>{
+    if(usingFallback||++tileErrors<6)return;
+    usingFallback=true;
+    console.warn('國土測繪中心圖磚讀取失敗，已切換備援底圖');
+    showBase();
+  });
+}
+showBase();
 
 // ── District fill layer ───────────────────────────────────────────────
 let activeLayer=null;
@@ -452,9 +480,7 @@ function applyTheme(t){
   document.documentElement.setAttribute('data-theme',theme);
   try{localStorage.setItem('fdmap-theme',theme);}catch(e){}
 
-  const wanted=TILES[theme],other=TILES[theme==='dark'?'light':'dark'];
-  if(map.hasLayer(other))map.removeLayer(other);
-  if(!map.hasLayer(wanted))wanted.addTo(map);
+  showBase();
 
   refreshAll();
 
