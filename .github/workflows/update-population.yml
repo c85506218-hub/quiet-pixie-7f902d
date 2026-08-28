@@ -2,9 +2,11 @@ name: 每月更新人口資料
 
 on:
   schedule:
-    # 每月 10 日 09:17（台北時間）＝ UTC 01:17
-    # 分鐘刻意錯開整點，整點是 GitHub 排程尖峰、比較容易被延後
-    - cron: '17 1 10 * *'
+    # 每月 1–20 日，每天 09:17（台北時間）＝ UTC 01:17 檢查一次。
+    # 沒有新月份就什麼都不做，所以天天跑很便宜；好處是資料一發布隔天就會更新，
+    # 而且某天失敗隔天會自動重試，不必等下個月。
+    # 分鐘錯開整點，整點是排程尖峰容易被延後。
+    - cron: '17 1 1-20 * *'
   workflow_dispatch:          # 隨時可以到 Actions 頁面手動按一下
   push:
     paths:
@@ -50,18 +52,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          printf '@%s\n\n' "${{ github.repository_owner }}" | cat - _update_summary.md > _issue.md
           gh issue create \
             --title "✅ 人口資料已更新至${{ steps.upd.outputs.month_label }}" \
-            --body-file _update_summary.md
+            --body-file _issue.md
 
       - name: 需要人工處理，開 issue 提醒
         if: steps.upd.outputs.needs_attention == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          printf '@%s\n\n' "${{ github.repository_owner }}" | cat - _update_summary.md > _issue.md
           gh issue create \
             --title "⚠️ 人口資料更新需要人工處理（${{ steps.upd.outputs.month_label }}）" \
-            --body-file _update_summary.md
+            --body-file _issue.md
 
       - name: 執行失敗，開 issue 提醒
         if: failure()
@@ -70,4 +74,4 @@ jobs:
         run: |
           gh issue create \
             --title "❌ 人口資料自動更新失敗" \
-            --body "自動更新流程執行失敗，請看執行紀錄：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            --body "@${{ github.repository_owner }} 自動更新流程執行失敗，請看執行紀錄：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
