@@ -269,10 +269,22 @@ def build_fd(pop_by_code):
 
 # ── 改寫 index.html ───────────────────────────────────────────────────
 def rewrite(FD, month, today):
+    """只有「資料內容」或「資料月份」變了才改寫。
+
+    「更新日期」不列入比較 —— 否則每天跑都會因為日期不同而被當成有變動，
+    每天 commit 一次、每天寄一封通知。
+    """
     src = io.open(INDEX, encoding='utf-8').read()
-    before = src
 
     blob = 'const FD=' + json.dumps(FD, ensure_ascii=False, separators=(', ', ': ')) + ';'
+
+    cur_blob = re.search(r'^const FD=\{.*\};$', src, re.M)
+    cur_month = re.search(r'<span id="dataMonth" data-yyymm="(\d+)"', src)
+    if (cur_blob and cur_blob.group(0) == blob
+            and cur_month and int(cur_month.group(1)) == month):
+        return False
+
+    before = src
     src, n = re.subn(r'^const FD=\{.*\};$', lambda m: blob, src, count=1, flags=re.M)
     assert n == 1, 'index.html 找不到 FD 區塊'
 
